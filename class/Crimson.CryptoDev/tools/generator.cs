@@ -68,6 +68,13 @@ namespace Crimson.Security.Cryptography {
 
 		HashHelper helper;
 
+		static {0}Kernel()
+		{
+			string blockSize = Environment.GetEnvironmentVariable (""CRIMSON_{0}_BUFFER_BLOCK_SIZE"");
+			BufferBlockSize = blockSize == null ? Int32.MaxValue : Convert.ToInt32 (blockSize);
+		}
+
+		public static int BufferBlockSize { get; set; }
 
 		public {0}Kernel ()
 		{
@@ -91,6 +98,7 @@ namespace Crimson.Security.Cryptography {
 		public override void Initialize ()
 		{
 			helper = new HashHelper (Cipher.{0});
+			helper.BufferBlockSize = BufferBlockSize;
 		}
 
 		protected override void HashCore (byte[] data, int start, int length) 
@@ -110,7 +118,8 @@ namespace Crimson.Security.Cryptography {
 }";
 		string filename = Path.Combine (OutputDirectory,
 			String.Format ("{0}Kernel.g.cs", name));
-		string content = template.Replace ("{0}", name);
+		string content = template.Replace ("{0}", name).
+			Replace ("{1}", name.ToUpperInvariant ());
 		File.WriteAllText (filename, content);
 	}
 
@@ -132,7 +141,13 @@ namespace Crimson.Security.Cryptography {
 
 	public class {0}Kernel : {0} {
 		
-		const int BufferBlockSize = Int32.MaxValue;
+		static {0}Kernel()
+		{
+			string blockSize = Environment.GetEnvironmentVariable (""CRIMSON_{4}_BUFFER_BLOCK_SIZE"");
+			BufferBlockSize = blockSize == null ? Int32.MaxValue : Convert.ToInt32 (blockSize);
+		}
+
+		public static int BufferBlockSize { get; set; }
 
 		public {0}Kernel ()
 		{
@@ -163,7 +178,9 @@ namespace Crimson.Security.Cryptography {
 				case CipherMode.CBC:
 					return new CryptoDevTransform (this, Cipher.{3}, false, rgbKey, rgbIV, BufferBlockSize);
 				case CipherMode.ECB:
-					return new CryptoDevTransform (this, Cipher.{2}, false, rgbKey, rgbIV, BufferBlockSize);
+					if (Helper.Mode == KernelMode.CryptoDev)
+						return new CryptoDevTransform (this, Cipher.{2}, false, rgbKey, rgbIV, BufferBlockSize);
+					break;
 				}
 			}
 			catch (CryptographicException) {
@@ -181,7 +198,9 @@ namespace Crimson.Security.Cryptography {
 				case CipherMode.CBC:
 					return new CryptoDevTransform (this, Cipher.{3}, true, rgbKey, rgbIV, BufferBlockSize);
 				case CipherMode.ECB:
-					return new CryptoDevTransform (this, Cipher.{2}, true, rgbKey, rgbIV, BufferBlockSize);
+					if (Helper.Mode == KernelMode.CryptoDev)
+						return new CryptoDevTransform (this, Cipher.{2}, true, rgbKey, rgbIV, BufferBlockSize);
+					break;
 				}
 			}
 			catch (CryptographicException) {
@@ -198,7 +217,8 @@ namespace Crimson.Security.Cryptography {
 		string content = template.Replace ("{0}", name).
 			Replace ("{1}", fallback).
 			Replace ("{2}", ecb).
-			Replace ("{3}", cbc);
+			Replace ("{3}", cbc).
+			Replace ("{4}", name.ToUpperInvariant ());
 		File.WriteAllText (filename, content);
 	}
 

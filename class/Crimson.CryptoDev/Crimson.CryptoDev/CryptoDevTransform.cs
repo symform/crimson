@@ -56,8 +56,8 @@ namespace Crimson.CryptoDev {
 
 		public CryptoDevTransform (SymmetricAlgorithm algo, Cipher cipher, bool encryption, byte[] rgbKey, byte[] rgbIV, int bufferBlockSize) 
 		{
-			if (!Helper.CryptoDevAvailable)
-				throw new CryptographicException ("Cannot access /dev/crypto");
+			if (!Helper.IsAvailable (cipher))
+				throw new CryptographicException (String.Format ("{0} not available from /dev/crypto", algo));
 
 			if (rgbKey == null)
 				throw new CryptographicException ("Invalid (null) key");
@@ -91,6 +91,10 @@ namespace Crimson.CryptoDev {
 
 			context.ses = sess.ses;
 			context.op = encryption ? CryptoOperation.Encrypt : CryptoOperation.Decrypt;
+			// CryptoOperation constants differs in OCF (0 is None, ...)
+			if (Helper.Mode == KernelMode.Ocf)
+				context.op++;
+			
 			if (algo.Mode != CipherMode.ECB) {
 				iv = rgbIV;
 				save_iv = new byte [BlockSizeByte];
@@ -151,8 +155,10 @@ namespace Crimson.CryptoDev {
 					fixed (byte *i = &iv [0])
 						context.iv = (IntPtr) i;
 
-					if (!encrypt)
-						Buffer.BlockCopy (input, length - BlockSizeByte, save_iv, 0, BlockSizeByte);
+					if (!encrypt) {
+						int ivOffset = inputOffset + size - BlockSizeByte;
+						Buffer.BlockCopy (input, ivOffset, save_iv, 0, BlockSizeByte);
+					}
 				}
 
 				fixed (byte *i = &input [inputOffset])
@@ -326,12 +332,10 @@ namespace Crimson.CryptoDev {
 			byte[] res = new byte [total];
 			int outputOffset = 0;
 
-			// process all blocks except the last (final) block
-			while (total > BlockSizeByte) {
-				InternalTransformBlock (inputBuffer, inputOffset, BlockSizeByte, res, outputOffset);
-				inputOffset += BlockSizeByte;
-				outputOffset += BlockSizeByte;
-				total -= BlockSizeByte;
+ 			// process all blocks except the last (final) block
+			if (total > BlockSizeByte) {
+				outputOffset = InternalTransformBlock (inputBuffer, inputOffset, total - BlockSizeByte, res, 0);
+				inputOffset += outputOffset;
 			}
 
 			// now we only have a single last block to encrypt
@@ -379,12 +383,8 @@ namespace Crimson.CryptoDev {
 			byte[] res = new byte [total];
 			int outputOffset = 0;
 
-			while (inputCount > 0) {
-				int len = InternalTransformBlock (inputBuffer, inputOffset, BlockSizeByte, res, outputOffset);
-				inputOffset += BlockSizeByte;
-				outputOffset += len;
-				inputCount -= BlockSizeByte;
-			}
+			if (inputCount > 0)
+				outputOffset = InternalTransformBlock (inputBuffer, inputOffset, inputCount, res, 0);
 
 			if (lastBlock) {
 				Transform (workBuff, 0, res, outputOffset, BlockSizeByte);
@@ -402,12 +402,12 @@ namespace Crimson.CryptoDev {
 					if (res [total - 1 - i] != 0x00)
 						ThrowBadPaddingException (padding, -1, i);
 				}
-				total -= padding;
+				total -= pad;
 				break;
 			case PaddingMode.ISO10126:
 				if ((pad == 0) || (pad > BlockSizeByte))
 					ThrowBadPaddingException (padding, pad, -1);
-				total -= padding;
+				total -= pad;
 				break;
 			case PaddingMode.PKCS7:
 				if ((pad == 0) || (pad > BlockSizeByte))
@@ -416,7 +416,7 @@ namespace Crimson.CryptoDev {
 					if (res [total - 1 - i] != pad)
 						ThrowBadPaddingException (padding, -1, i);
 				}
-				total -= padding;
+				total -= pad;
 				break;
 			case PaddingMode.None:	// nothing to do - it's a multiple of block size
 			case PaddingMode.Zeros:	// nothing to do - user must unpad himself

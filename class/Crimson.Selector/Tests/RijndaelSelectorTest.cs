@@ -38,16 +38,21 @@ namespace Crimson.Test.CryptoDev {
 	[TestFixture]
 	public class RijndaelKernelTest : RijndaelTest {
 		
+		bool identify = false;
+		
 		[SetUp]
 		protected void SetUp () 
 		{
-			CryptoDevTest.EnsureAvailability ();
 			algo = Create (); // shared
+			if (!identify) {
+				identify = true;
+				Console.WriteLine (algo);
+			}
 		}
 
 		protected override SymmetricAlgorithm Create ()
 		{
-			return new RijndaelKernel ();
+			return new RijndaelSelector ();
 		}
 
 		static bool Compare (byte[] actual, byte[] expected)
