@@ -23,89 +23,80 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
-
 namespace Crimson.OpenSsl
 {
-    using System;
-    using System.Security.Cryptography;
-    using Crimson.Common;
+	using System;
+	using System.Security.Cryptography;
+	using Crimson.Common;
 
-    internal unsafe class OpenSslCryptoTransform : CryptoTransformBase
-    {
-        private IntPtr context;
+	internal unsafe class OpenSslCryptoTransform : CryptoTransformBase
+	{
+		private readonly Native.SafeCipherContextHandle context;
 
-        public OpenSslCryptoTransform(SymmetricAlgorithm algo, bool encrypt, byte[] rgbKey, byte[] rgbIV)
-            : base(algo, encrypt, rgbKey, rgbIV)
-        {
+		public OpenSslCryptoTransform (SymmetricAlgorithm algo, bool encrypt, byte[] rgbKey, byte[] rgbIV)
+            : base (algo, encrypt, rgbKey, rgbIV)
+		{
 			OpenSslUtil.EnsureAvailability ();
 
-            this.context = Native.EVP_CIPHER_CTX_new();
+			this.context = Native.EVP_CIPHER_CTX_new ();
 
-            var cptr = this.GetCipher(algo.Mode, rgbKey.Length);
+			var cptr = this.GetCipher (algo.Mode, rgbKey.Length);
+			var op = encrypt ? Native.CipherOperation.Encrypt : Native.CipherOperation.Decrypt;
 
-            fixed (byte *pkey = &rgbKey[0])
-            fixed (byte* piv = &iv[0])
-            {
-                Native.ExpectSuccess(Native.EVP_CipherInit_ex(this.context, cptr, IntPtr.Zero, (IntPtr)pkey, (IntPtr)piv, encrypt? 1: 0));
-            }
+			fixed (byte* pkey = &rgbKey[0])
+				fixed (byte* piv = &iv[0]) {
+					Native.ExpectSuccess (Native.EVP_CipherInit_ex (this.context, cptr, IntPtr.Zero, (IntPtr)pkey, (IntPtr)piv, op));
+				}
 
-            Native.ExpectSuccess(Native.EVP_CIPHER_CTX_set_key_length(this.context, rgbKey.Length));
-            Native.ExpectSuccess(Native.EVP_CIPHER_CTX_set_padding(this.context, 0));
-        }
+			Native.ExpectSuccess (Native.EVP_CIPHER_CTX_set_key_length (this.context, rgbKey.Length));
+			Native.ExpectSuccess (Native.EVP_CIPHER_CTX_set_padding (this.context, 0));
+		}
 
-        protected override void Dispose(bool disposing)
-        {
-            if (this.context != IntPtr.Zero)
-            {
-                Native.EVP_CIPHER_CTX_free(this.context);
-                this.context = IntPtr.Zero;
-            }
+		protected override void Dispose (bool disposing)
+		{
+			if (disposing) {
+				this.context.Dispose ();
+			}
 
-            base.Dispose(disposing);
-        }
+			base.Dispose (disposing);
+		}
 
-        protected override void Transform(byte[] inputBuffer, int inputOffset, byte[] outputBuffer, int outputOffset, int inputCount)
-        {
-            fixed (byte* input = &inputBuffer[inputOffset])
-            fixed (byte* output = &outputBuffer[outputOffset])
-            {
-                int outputCount;
-                Native.ExpectSuccess(Native.EVP_CipherUpdate(this.context, (IntPtr)output, out outputCount, (IntPtr)input, inputCount));
-            }
-        }
+		protected override void Transform (byte[] inputBuffer, int inputOffset, byte[] outputBuffer, int outputOffset, int inputCount)
+		{
+			fixed (byte* input = &inputBuffer[inputOffset])
+				fixed (byte* output = &outputBuffer[outputOffset]) {
+					int outputCount;
+					Native.ExpectSuccess (Native.EVP_CipherUpdate (this.context, (IntPtr)output, out outputCount, (IntPtr)input, inputCount));
+				}
+		}
 
-        private IntPtr GetCipher(CipherMode mode, int keyLength)
-        {
-            if (mode == CipherMode.CBC)
-            {
-                switch (keyLength)
-                {
-                    case 16:
-                        return Native.EVP_aes_128_cbc();
+		private Native.SafeCipherHandle GetCipher (CipherMode mode, int keyLength)
+		{
+			if (mode == CipherMode.CBC) {
+				switch (keyLength) {
+				case 16:
+					return Native.EVP_aes_128_cbc ();
 
-                    case 24:
-                        return Native.EVP_aes_192_cbc();
+				case 24:
+					return Native.EVP_aes_192_cbc ();
 
-                    case 32:
-                        return Native.EVP_aes_256_cbc();
-                }
-            }
-            else if (mode == CipherMode.ECB)
-            {
-                switch (keyLength)
-                {
-                    case 16:
-                        return Native.EVP_aes_128_ecb();
+				case 32:
+					return Native.EVP_aes_256_cbc ();
+				}
+			} else if (mode == CipherMode.ECB) {
+				switch (keyLength) {
+				case 16:
+					return Native.EVP_aes_128_ecb ();
 
-                    case 24:
-                        return Native.EVP_aes_192_ecb();
+				case 24:
+					return Native.EVP_aes_192_ecb ();
 
-                    case 32:
-                        return Native.EVP_aes_256_ecb();
-                }
-            }
+				case 32:
+					return Native.EVP_aes_256_ecb ();
+				}
+			}
 
-            throw new CryptographicException(string.Format("{0} not supported", mode));
-        }
-    }
+			throw new CryptographicException (string.Format ("{0} not supported", mode));
+		}
+	}
 }

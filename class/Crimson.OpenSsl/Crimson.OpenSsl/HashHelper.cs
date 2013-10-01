@@ -25,61 +25,65 @@
 //
 namespace Crimson.OpenSsl
 {
-    using System;
+	using System;
+	using System.Security.Cryptography;
 
-    internal sealed class HashHelper : IDisposable
-    {
-        private IntPtr context;
-        private readonly int hashSize;
+	internal sealed class HashHelper : IDisposable
+	{
+		private readonly Native.SafeDigestContextHandle context;
+		private readonly int hashSize;
 
-        public HashHelper(IntPtr mdptr, int hashSize)
-        {
-            this.hashSize = hashSize >> 3;
-            this.context = Native.EVP_MD_CTX_create();
+		public HashHelper (Native.SafeDigestHandle digest, int hashSize)
+		{
+			this.hashSize = hashSize >> 3;
+			if (this.hashSize > Native.MaximumDigestSize) {
+				throw new ArgumentOutOfRangeException ("hashSize");
+			}
 
-            Native.ExpectSuccess(Native.EVP_DigestInit_ex(this.context, mdptr, IntPtr.Zero));
-        }
+			this.context = Native.EVP_MD_CTX_create ();
+			Native.ExpectSuccess (Native.EVP_DigestInit_ex (this.context, digest, IntPtr.Zero));
+		}
 
-        ~HashHelper()
-        {
-            Dispose();
-        }
+		public void Dispose ()
+		{
+			this.context.Dispose ();
+		}
 
-        public void Dispose()
-        {
-            if (this.context != IntPtr.Zero)
-            {
-                Native.EVP_MD_CTX_destroy(this.context);
-                this.context = IntPtr.Zero;
-            }
+		public unsafe void Update (byte[] data, int start, int length)
+		{
+			if (length == 0) {
+				return;
+			}
 
-            GC.SuppressFinalize(this);
-        }
+			if (length < uint.MinValue) {
+				throw new ArgumentOutOfRangeException ("length");
+			}
 
-        public unsafe void Update(byte[] data, int start, int length)
-        {
-            if (length == 0)
-            {
-                return;
-            }
+			fixed (byte* p = &data[start]) {
+				Native.ExpectSuccess (Native.EVP_DigestUpdate (this.context, (IntPtr)p, (uint)length));
+			}
+		}
 
-            fixed (byte* p = &data[start])
-            {
-                Native.ExpectSuccess(Native.EVP_DigestUpdate(this.context, (IntPtr)p, (uint)length));
-            }
-        }
+		public unsafe byte[] Final ()
+		{
+			var digest = new byte[Native.MaximumDigestSize];
+			uint len;
 
-        public unsafe byte[] Final()
-        {
-            var digest = new byte[this.hashSize];
-            var len = (uint)digest.Length;
+			fixed (byte* p = &digest[0]) {
+				Native.ExpectSuccess (Native.EVP_DigestFinal_ex (this.context, (IntPtr)p, out len));
+			}
 
-            fixed (byte* p = &digest[0])
-            {
-                Native.ExpectSuccess(Native.EVP_DigestFinal_ex(this.context, (IntPtr)p, ref len));
-            }
+			if (len != this.hashSize) {
+				throw new CryptographicException (string.Format ("Mismatched hash length was expecting {0} but got {1}", this.hashSize, len));
+			}
 
-            return digest;
-        }
-    }
+			if (len == digest.Length) {
+				return digest;
+			}
+
+			var trimmed = new byte[this.hashSize];
+			Buffer.BlockCopy (digest, 0, trimmed, 0, this.hashSize);
+			return trimmed;
+		}
+	}
 }

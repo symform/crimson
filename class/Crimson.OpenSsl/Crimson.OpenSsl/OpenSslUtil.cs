@@ -23,7 +23,6 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
-
 namespace Crimson.OpenSsl
 {
 	using System;
@@ -32,30 +31,27 @@ namespace Crimson.OpenSsl
 
 	public class OpenSslUtil
 	{
-		public static bool IsAvailable()
+		public static bool IsAvailable ()
 		{
-			try
-			{
-				GetVersionInfo();
-			}
-			catch (DllNotFoundException)
-			{
+			try {
+				GetVersionInfo ();
+			} catch (DllNotFoundException) {
 				return false;
 			}
 			
 			return true;
 		}
 
-		public static void EnsureAvailability()
+		public static void EnsureAvailability ()
 		{
 			if (!IsAvailable ()) {
 				throw new CryptographicException ("libcrypto was not found");
 			}
 		}
 
-		public static string GetVersionInfo()
+		public static string GetVersionInfo ()
 		{
-			return Marshal.PtrToStringAuto(Native.SSLeay_version (Native.SSLEAY_VERSION));
+			return Marshal.PtrToStringAnsi (Native.SSLeay_version (Native.SSLeayVersionType.SSLEAY_VERSION));
 		}
 	}
 }
